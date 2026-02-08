@@ -1,0 +1,292 @@
+<?php
+set_time_limit(600);
+ini_set('memory_limit', '256M');
+
+/**
+ * OSINT Connectivity Check
+ */
+function exists($url) {
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HEADER => true,
+        CURLOPT_NOBODY => true,
+        CURLOPT_TIMEOUT => 2,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) OSINT/2026-VOID',
+        CURLOPT_SSL_VERIFYPEER => false
+    ]);
+    curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    return ($code >= 200 && $code < 300);
+}
+
+/**
+ * High-Density Variation Generator (100+)
+ */
+function generate_heavy_variations($u) {
+    $u = strtolower(preg_replace('/[^a-zA-Z0-9_.-]/', '', $u));
+    if (!$u) return [];
+    
+    $v = [$u];
+    $tags = ['real', 'the', 'iam', 'official', 'its', 'thisis', 'my', 'original', 'verified', 'admin', 'user', 'dev', 'web', 'x', '0x', 'meta', 'pro', 'live', 'hq', 'main', 'prime', 'ultra', 'anon', 'core', 'net', 'vault', 'cyber', 'void'];
+    
+    // Prefixes/Suffixes
+    foreach($tags as $t) { $v[] = $t . $u; $v[] = $u . $t; $v[] = $u . "_" . $t; }
+    
+    // Numerics (01-50)
+    for($i = 1; $i <= 40; $i++) { 
+        $v[] = $u . $i; 
+        $v[] = $u . str_pad($i, 2, '0', STR_PAD_LEFT); 
+    }
+    
+    // Years & Structural
+    $years = ['2024', '2025', '2026', '99', '00', '07', '11', '77', '88'];
+    foreach($years as $y) { $v[] = $u . $y; $v[] = $u . "_" . $y; }
+    
+    if(strlen($u) > 2) {
+        $mid = intval(strlen($u) / 2); $p1 = substr($u, 0, $mid); $p2 = substr($u, $mid);
+        $seps = ['_', '.', '-', '__', '...', 'x', '0'];
+        foreach($seps as $s) { $v[] = $p1 . $s . $p2; $v[] = $s . $u . $s; }
+    }
+    
+    // Leet conversion
+    $v[] = str_replace(['a', 'e', 'i', 'o', 's', 't'], ['4', '3', '1', '0', '5', '7'], $u);
+    
+    return array_unique($v);
+}
+
+$platforms = [
+    // Social & General (20)
+    "Facebook" => "https://www.facebook.com/%s",
+    "Instagram" => "https://www.instagram.com/%s",
+    "X" => "https://x.com/%s",
+    "Threads" => "https://www.threads.net/@%s",
+    "TikTok" => "https://www.tiktok.com/@%s",
+    "Snapchat" => "https://www.snapchat.com/add/%s",
+    "Reddit" => "https://www.reddit.com/user/%s",
+    "Pinterest" => "https://www.pinterest.com/%s",
+    "LinkedIn" => "https://www.linkedin.com/in/%s",
+    "YouTube" => "https://www.youtube.com/@%s",
+    "Twitch" => "https://www.twitch.tv/%s",
+    "Tumblr" => "https://%s.tumblr.com",
+    "Medium" => "https://medium.com/@%s",
+    "Quora" => "https://www.quora.com/profile/%s",
+    "Flickr" => "https://www.flickr.com/photos/%s",
+    "Behance" => "https://www.behance.net/%s",
+    "Dribbble" => "https://dribbble.com/%s",
+    "Vimeo" => "https://vimeo.com/%s",
+    "SoundCloud" => "https://soundcloud.com/%s",
+    "Mastodon" => "https://mastodon.social/@%s",
+
+    // Tech & Coding (15)
+    "GitHub" => "https://github.com/%s",
+    "GitLab" => "https://gitlab.com/%s",
+    "StackOverflow" => "https://stackoverflow.com/users/%s",
+    "HackerNews" => "https://news.ycombinator.com/user?id=%s",
+    "CodePen" => "https://codepen.io/%s",
+    "Dev.to" => "https://dev.to/%s",
+    "Kaggle" => "https://www.kaggle.com/%s",
+    "Scratch" => "https://scratch.mit.edu/users/%s",
+    "npm" => "https://www.npmjs.com/~%s",
+    "PyPI" => "https://pypi.org/user/%s",
+    "DockerHub" => "https://hub.docker.com/u/%s",
+    "BitBucket" => "https://bitbucket.org/%s/",
+    "ProductHunt" => "https://www.producthunt.com/@%s",
+    "SourceForge" => "https://sourceforge.net/u/%s",
+    "Replit" => "https://replit.com/@%s",
+
+    // Gaming & Entertainment (15)
+    "Steam" => "https://steamcommunity.com/id/%s",
+    "Roblox" => "https://www.roblox.com/user.aspx?username=%s",
+    "Xbox" => "https://www.xboxgamertag.com/search/%s",
+    "PlayStation" => "https://psnprofiles.com/%s",
+    "Chess.com" => "https://www.chess.com/member/%s",
+    "Letterboxd" => "https://letterboxd.com/%s",
+    "Goodreads" => "https://www.goodreads.com/%s",
+    "MyAnimeList" => "https://myanimelist.net/profile/%s",
+    "Discord" => "https://discord.com/users/%s",
+    "Battle.net" => "https://worldofwarcraft.com/en-us/character/%s",
+    "Epic Games" => "https://www.epicgames.com/u/%s",
+    "NexusMods" => "https://www.nexusmods.com/users/%s",
+    "Speedrun.com" => "https://www.speedrun.com/user/%s",
+    "GOG" => "https://www.gog.com/u/%s",
+    "Itch.io" => "https://%s.itch.io",
+
+    // Others / Professional / Creative (20)
+    "Patreon" => "https://www.patreon.com/%s",
+    "OnlyFans" => "https://onlyfans.com/%s",
+    "Substack" => "https://%s.substack.com",
+    "BuyMeACoffee" => "https://www.buymeacoffee.com/%s",
+    "Linktree" => "https://linktr.ee/%s",
+    "Gumroad" => "https://%s.gumroad.com",
+    "Strava" => "https://www.strava.com/athletes/%s",
+    "Venmo" => "https://venmo.com/u/%s",
+    "CashApp" => "https://cash.app/$%s",
+    "Paypal" => "https://www.paypal.me/%s",
+    "Etsy" => "https://www.etsy.com/people/%s",
+    "TripAdvisor" => "https://www.tripadvisor.com/Profile/%s",
+    "AllTrails" => "https://www.alltrails.com/members/%s",
+    "Duolingo" => "https://www.duolingo.com/profile/%s",
+    "Wix" => "https://%s.wixsite.com",
+    "WordPress" => "https://%s.wordpress.com",
+    "VK" => "https://vk.com/%s",
+    "Telegram" => "https://t.me/%s",
+    "DailyMotion" => "https://www.dailymotion.com/%s",
+    "Bandcamp" => "https://bandcamp.com/%s",
+];
+
+$u = isset($_GET['u']) ? $_GET['u'] : '';
+$mode = $_GET['mode'] ?? '';
+$results = []; $vars = [];
+
+if ($u) {
+    if ($mode === 'exact') {
+        foreach ($platforms as $name => $tpl) {
+            $url = sprintf($tpl, $u);
+            if (exists($url)) $results[] = ["name" => $name, "url" => $url];
+        }
+    } elseif ($mode === 'extract') {
+        $vars = generate_heavy_variations($u);
+    }
+}
+?>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OSINT-Legion</title>
+    <style>
+        :root { 
+            --neon: #BC13FE; 
+            --bg: #050208; 
+            --panel: rgba(10, 2, 15, 0.95); 
+            --text: #e2d5f2; 
+            --border: rgba(188, 19, 254, 0.4);
+        }
+        
+        body { 
+            background: var(--bg); color: var(--text); font-family: 'Courier New', monospace; 
+            margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; overflow: hidden;
+        }
+        
+        #glow { 
+            position: fixed; width: 700px; height: 700px; 
+            background: radial-gradient(circle, rgba(188, 19, 254, 0.06) 0%, transparent 70%); 
+            pointer-events: none; z-index: 0; transform: translate(-50%, -50%); 
+        }
+
+        .app { 
+            width: 100%; max-width: 1100px; background: var(--panel); 
+            border: 1px solid var(--border); backdrop-filter: blur(40px); 
+            padding: 30px; border-radius: 12px; z-index: 1; 
+            box-shadow: 0 0 80px rgba(0,0,0,1); height: 88vh; display: flex; flex-direction: column; 
+            position: relative;
+        }
+
+        /* Scan-line Effect */
+        .app::before {
+            content: " ";
+            position: absolute; top: 0; left: 0; width: 100%; height: 2px;
+            background: rgba(188, 19, 254, 0.1);
+            animation: scan 4s linear infinite;
+            z-index: 2;
+        }
+
+        @keyframes scan {
+            0% { top: 0; }
+            100% { top: 100%; }
+        }
+        
+        h2 { text-align: center; letter-spacing: 12px; color: var(--neon); text-shadow: 0 0 10px var(--neon); margin: 0 0 25px 0; font-size: 24px; }
+
+        input { 
+            width: 100%; padding: 20px; background: #000; border: 1px solid var(--border); 
+            color: var(--neon); font-size: 22px; text-align: center; margin-bottom: 20px; 
+            box-sizing: border-box; outline: none; transition: 0.3s; 
+        }
+        input:focus { border-color: #fff; box-shadow: 0 0 20px var(--neon); }
+
+        .btn-group { display: flex; gap: 12px; margin-bottom: 25px; }
+        button { 
+            flex: 1; padding: 18px; cursor: pointer; border: 1px solid var(--neon); 
+            font-weight: bold; font-family: inherit; transition: 0.3s; text-transform: uppercase; 
+            letter-spacing: 3px; background: transparent; color: var(--neon);
+        }
+        .btn-scan { background: var(--neon); color: #000; }
+        button:hover { background: #fff; color: #000; border-color: #fff; box-shadow: 0 0 30px #fff; }
+
+        .scroll-box { flex-grow: 1; overflow-y: auto; border-top: 1px solid var(--border); padding-top: 15px; }
+        .row { 
+            display: flex; justify-content: space-between; align-items: center; 
+            padding: 18px; border-bottom: 1px solid rgba(188, 19, 254, 0.15); transition: 0.2s; 
+        }
+        .row:hover { background: rgba(188, 19, 254, 0.08); }
+        
+        .btn-open { 
+            text-decoration: none; background: transparent; color: var(--neon); 
+            padding: 8px 18px; border: 1px solid var(--neon); border-radius: 4px; font-size: 11px; font-weight: bold; transition: 0.2s;
+        }
+        .btn-open:hover { background: var(--neon); color: #000; }
+
+        @media (max-width: 768px) {
+            .app { height: 95vh; padding: 20px; border-radius: 0; }
+            .btn-group { flex-direction: column; }
+            .row { flex-direction: column; gap: 15px; text-align: center; }
+            h2 { font-size: 18px; letter-spacing: 5px; }
+        }
+
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb { background: var(--neon); }
+        .counter { font-size: 11px; color: var(--neon); opacity: 0.8; margin-bottom: 10px; text-align: right; letter-spacing: 2px; }
+    </style>
+</head>
+<body>
+
+<div id="glow"></div>
+
+<div class="app">
+    <h2>OSINT-Legion</h2>
+    
+    <form method="GET">
+        <input type="text" name="u" value="<?= htmlspecialchars($u) ?>" placeholder="[INPUT_DATA_STREAM]" autocomplete="off" required>
+        <div class="btn-group">
+            <button type="submit" name="mode" value="exact" class="btn-scan">Global Scan</button>
+            <button type="submit" name="mode" value="extract" class="btn-extract">Extract Permutations</button>
+        </div>
+    </form>
+
+    <?php if ($mode === 'extract'): ?><div class="counter"><?= count($vars) ?> ENTRIES_GENERATED</div><?php endif; ?>
+
+    <div class="scroll-box">
+        <?php if ($mode === 'exact' && $results): ?>
+            <?php foreach ($results as $res): ?>
+                <div class="row">
+                    <span style="color:#fff;"><?= $res['name'] ?></span>
+                    <a href="<?= $res['url'] ?>" target="_blank" class="btn-open">ACCESS_PROFILE</a>
+                </div>
+            <?php endforeach; ?>
+        <?php elseif ($mode === 'extract' && $vars): ?>
+            <?php foreach ($vars as $v): ?>
+                <div class="row">
+                    <span><?= htmlspecialchars($v) ?></span>
+                    <a href="?u=<?= urlencode($v) ?>&mode=exact" target="_blank" class="btn-open">OPEN_RESEARCH</a>
+                </div>
+            <?php endforeach; ?>
+        <?php endif; ?>
+    </div>
+</div>
+
+<script>
+    const glow = document.getElementById('glow');
+    document.addEventListener('mousemove', (e) => {
+        glow.style.left = e.clientX + 'px';
+        glow.style.top = e.clientY + 'px';
+    });
+</script>
+
+</body>
+</html>
